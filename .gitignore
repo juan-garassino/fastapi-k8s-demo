@@ -13,7 +13,6 @@ venv/
 
 # Docker
 # Dockerfile
-.dockerignore
 
 # IDE
 .vscode/

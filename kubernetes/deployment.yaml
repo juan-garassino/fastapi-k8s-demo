@@ -18,17 +18,17 @@ spec:
       - name: fastapi-app
         image: ghcr.io/juan-garassino/fastapi-demo:latest
         ports:
-        - containerPort: 8000
+        - containerPort: 8080
         livenessProbe:
           httpGet:
-            path: /health
-            port: 8000
+            path: /healthz
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health
-            port: 8000
+            path: /healthz
+            port: 8080
           initialDelaySeconds: 2
           periodSeconds: 5
 ---
