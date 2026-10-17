@@ -14,11 +14,25 @@ spec:
       labels:
         app: fastapi-demo
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001        # matches the Dockerfile's appuser
       containers:
       - name: fastapi-app
         image: ghcr.io/juan-garassino/fastapi-demo:latest
         ports:
         - containerPort: 8080
+        # The HPA below scales on CPU utilization, which needs requests.cpu.
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         livenessProbe:
           httpGet:
             path: /healthz

@@ -1,0 +1,10 @@
+-r requirements.txt
+
+# --- Testing & Code Quality (used in GitHub Actions) ---
+pytest==9.0.3             # Unit testing
+httpx==0.27.2             # For async API test client in pytest
+
+black==26.3.1             # Code formatting
+flake8==7.1.1             # Linting
+mypy==1.11.2              # Static type checking
+bandit==1.7.10            # Security linting

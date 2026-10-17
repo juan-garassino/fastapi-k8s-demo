@@ -33,32 +33,43 @@ Automated security & bug guardian ledger for this repo. Branch: `claude/guardian
 | G-015 | low | Docker: base image `python:3.11-slim` not pinned by digest | Dockerfile | open | 2026-10-15 |
 | G-016 | low | quality: debug `print` at import, deprecated `utcnow()` / `.dict()` | src/app/main.py | fixed | 2026-10-15 |
 | G-017 | info | bandit B311 (`random` for non-crypto demo endpoint) | src/app/main.py | wontfix | 2026-10-15 |
+| G-018 | medium | bug: HPA scales on CPU utilization but the Deployment had no `resources.requests.cpu` -> HPA "missing request for cpu", never scales; no memory limit | kubernetes/deployment.yaml | fixed | 2026-10-17 |
+| G-019 | medium | k8s: pod had no securityContext (runAsNonRoot, allowPrivilegeEscalation, capabilities) | kubernetes/deployment.yaml | fixed | 2026-10-17 |
+| G-020 | medium | DoS: unbounded in-memory item store on a public `--allow-unauthenticated` service (memory exhaustion) | src/app/main.py | fixed (MAX_ITEMS=10000 -> 507) | 2026-10-17 |
+| G-021 | low | validation: Item accepted negative price/quantity, empty or unbounded name/description; `/echo` path unbounded | src/app/main.py | fixed (Field bounds, echo max 1000) | 2026-10-17 |
+| G-022 | low | Docker: test/lint tools (pytest, black, flake8, mypy, bandit) installed into the production image | requirements.txt, requirements-dev.txt | fixed (split dev deps) | 2026-10-17 |
+| G-023 | low | docs: README local run (`uvicorn app.main:app` from repo root) and `docker run -p 8000:8000` (image listens on 8080) were wrong | README.md | fixed | 2026-10-17 |
+| G-024 | info | pip-audit of the environment flags pip 24.0 (venv bootstrap only; the Dockerfile upgrades pip) | - | n/a | 2026-10-17 |
 
-Secrets: gitleaks (31 commits, all refs) and detect-secrets found nothing.
+Secrets: gitleaks (31 commits, all refs) and detect-secrets found nothing (run 1). Run 2: gitleaks 8.21.2 over 32 commits, all refs, plus manual `git log -p --all` grep: nothing.
 
 ## Metrics
 
-| metric | before | after |
-|--------|--------|-------|
-| open vulns (crit/high/med/low) | 0/2/1/2 packages (18 advisories) | 0/0/0/0 deps; config items open: 1 med (G-010), 3 low |
-| tests passing (plain `pytest`, as CI) | 0 (collection error) | 6/6 |
-| test count | 3 | 6 |
-| ruff (defaults) | 11 | 0 |
-| flake8 | 24 | 22 |
-| mypy errors | 2 | 0 |
-| bandit (high/med/low) | 0/0/1 | 0/0/1 |
+| metric | run 1 before | run 1 after | run 2 after |
+|--------|--------|-------|-------|
+| open vulns/issues (crit/high/med/low) | 0/2/1/2 packages (18 advisories) | deps 0/0/0/0; config 0/0/1/3 | deps 0/0/0/0; open 0/0/1/3 (G-010 med; G-011, G-014, G-015 low). Run 2 found and fixed 0/0/3/3 |
+| tests passing (plain `pytest`, as CI) | 0 (collection error) | 6/6 | 12/12 |
+| test count | 3 | 6 | 12 |
+| ruff (defaults) | 11 | 0 | 0 |
+| flake8 | 24 | 22 | 7 |
+| mypy errors | 2 | 0 | 0 |
+| bandit (high/med/low) | 0/0/1 | 0/0/1 | 0/0/1 |
 
 ## Backlog
 
 - Apply the CI patch for G-010/G-011 by hand (guardian token cannot edit workflows).
 - Pin GitHub Actions to commit SHAs (G-014) and base image by digest (G-015).
 - `.sample` workflows grant `contents: write`/`packages: write` workflow-wide; scope per job before enabling them.
-- `/echo/{text}` and the in-memory store have no size limits; fine for a demo, add limits before real use.
+- Remaining flake8: 7 E501 long lines (pre-existing docstrings/test JSON); harmless.
+- Optional CI patch: install `-r requirements-dev.txt` instead of `requirements.txt pytest httpx` so CI uses the pinned test tools (workflow edit, owner only).
+- Image tag `:latest` in kubernetes/deployment.yaml; pin to a commit-SHA tag or digest when the deploy flow writes manifests.
 - Consider pinning transitive deps (lock file) and adding Dependabot.
 
 ## Log
 
 - Run 1 — 2026-10-15: baseline scan; bumped 5 vulnerable deps (pip-audit now clean); fixed ID-reuse overwrite, nullable description, broken CI test import, k8s probe path/port mismatch; CI hardening (deploy-on-PR, OIDC scope) blocked: push token lacks `workflow` scope, left open; non-root Docker user + committed .dockerignore. 3 regression tests added (3 -> 6 tests, all passing).
+
+- Run 2 — 2026-10-17: no PR review comments; deps and secrets still clean (gitleaks 32 commits). Fixed HPA without CPU requests (never scales), added pod securityContext, capped the public in-memory store (507 when full), bounded Item fields and `/echo`, moved test/lint tools out of the production image (requirements-dev.txt), fixed README run commands. 6 regression tests, each failing before its fix (6 -> 12 tests, all passing). Workflow items G-010/G-011/G-014 still need the owner.
 
 ## Learnings
 
@@ -66,9 +77,15 @@ Secrets: gitleaks (31 commits, all refs) and detect-secrets found nothing.
 
 - `python -m pytest` hides import-path bugs that plain `pytest` (what CI runs) exposes; verify with the CI command.
 - Recent FastAPI has no upper bound on starlette, so starlette security floors must be pinned explicitly.
+- An HPA on `targetCPUUtilizationPercentage` silently does nothing without `resources.requests.cpu`; check every HPA's target for requests.
+- `uvicorn[standard]` pulls in PyYAML, so manifest tests can `yaml.safe_load_all` without a new dependency.
+- Both workflows install `pytest httpx` explicitly, so dev tools could leave requirements.txt without a workflow edit.
 
 ## Ideas
 
 1. Add a CI step running `pip-audit` and `bandit` on every PR.
 2. Add a manifest-vs-app consistency check (probes/ports) for all k8s files.
 3. Replace the in-memory dict with a small repository class so tests can reset state between cases.
+4. Run `kubeconform`/`kube-linter` on `kubernetes/` in CI to catch missing requests/securityContext.
+5. Read `MAX_ITEMS` and the echo limit from env vars so Cloud Run can tune them without a rebuild.
+6. Add a Docker build plus `trivy image` scan job once the workflow scope is available.
