@@ -1,16 +1,10 @@
 # --- Core dependencies ---
-fastapi==0.115.0          # The web framework
+fastapi==0.143.2          # The web framework
 uvicorn[standard]==0.31.0 # ASGI server (for local and Cloud Run)
+starlette>=1.3.1          # pinned floor: security fixes (pulled in by fastapi)
 
 # --- Optional runtime helpers ---
-python-multipart==0.0.9   # (if you later handle forms or file uploads)
-requests==2.32.3          # (useful for internal calls or smoke tests)
+python-multipart==0.0.32  # (if you later handle forms or file uploads)
+requests==2.33.0          # (useful for internal calls or smoke tests)
 
-# --- Testing & Code Quality (used in GitHub Actions) ---
-pytest==8.3.3             # Unit testing
-httpx==0.27.2             # For async API test client in pytest
-
-black==24.10.0            # Code formatting
-flake8==7.1.1             # Linting
-mypy==1.11.2              # Static type checking
-bandit==1.7.10            # Security linting
+# Test/lint tools live in requirements-dev.txt (kept out of the image).

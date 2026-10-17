@@ -29,10 +29,10 @@ kubectl apply -f kubernetes/service.yaml
 ## Local Development
 ```bash
 # Install dependencies
-pip install -e .[uvicorn]
+pip install -r requirements-dev.txt
 
 # Run locally
-uvicorn app.main:app --reload
+uvicorn app.main:app --app-dir src --reload
 
 # Run tests
 pytest
@@ -41,9 +41,9 @@ pytest
 docker build -t fastapi-demo .
 
 # Run container
-docker run -p 8000:8000 fastapi-demo
+docker run -p 8080:8080 fastapi-demo
 ```
 
 ## Access the API
-- Local: http://localhost:8000
+- Local: http://localhost:8000 (uvicorn) / http://localhost:8080 (Docker)
 - Kubernetes: Get external IP with `kubectl get svc fastapi-demo-service`
