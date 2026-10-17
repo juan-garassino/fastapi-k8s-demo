@@ -1,4 +1,6 @@
+import os
 import random
+import threading
 from datetime import UTC, datetime
 from itertools import count
 from typing import Annotated
@@ -24,11 +26,24 @@ class Item(BaseModel):
     quantity: int = Field(ge=0)
 
 
+def _env_int(name: str, default: int) -> int:
+    """Read a positive int from the environment; fail fast on bad values."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = int(raw)
+    if value < 1:
+        raise ValueError(f"{name} must be >= 1")
+    return value
+
+
 # Mock in-memory store, capped so unauthenticated clients
-# cannot exhaust memory.
-MAX_ITEMS = 10_000
-MAX_ECHO_LENGTH = 1000
+# cannot exhaust memory. Both limits are env-tunable (read at startup).
+MAX_ITEMS = _env_int("MAX_ITEMS", 10_000)
+MAX_ECHO_LENGTH = _env_int("MAX_ECHO_LENGTH", 1000)
 items_db: dict[int, dict] = {}
+# Sync endpoints run in a threadpool: guard check-then-act on the store.
+_db_lock = threading.Lock()
 # Monotonic ID source: never reuses an ID after a delete.
 _next_id = count(1)
 
@@ -67,10 +82,11 @@ def read_item(item_id: int):
 @app.post("/items")
 def create_item(item: Item):
     """Create a new item."""
-    if len(items_db) >= MAX_ITEMS:
-        raise HTTPException(status_code=507, detail="Item store is full")
-    item_id = next(_next_id)
-    items_db[item_id] = item.model_dump()
+    with _db_lock:
+        if len(items_db) >= MAX_ITEMS:
+            raise HTTPException(status_code=507, detail="Item store is full")
+        item_id = next(_next_id)
+        items_db[item_id] = item.model_dump()
     return {
         "message": "Item created",
         "item_id": item_id,
@@ -81,9 +97,10 @@ def create_item(item: Item):
 @app.put("/items/{item_id}")
 def update_item(item_id: int, item: Item):
     """Update an existing item."""
-    if item_id not in items_db:
-        raise HTTPException(status_code=404, detail="Item not found")
-    items_db[item_id] = item.model_dump()
+    with _db_lock:
+        if item_id not in items_db:
+            raise HTTPException(status_code=404, detail="Item not found")
+        items_db[item_id] = item.model_dump()
     return {
         "message": "Item updated",
         "item_id": item_id,
@@ -94,9 +111,10 @@ def update_item(item_id: int, item: Item):
 @app.delete("/items/{item_id}")
 def delete_item(item_id: int):
     """Delete an item."""
-    if item_id not in items_db:
-        raise HTTPException(status_code=404, detail="Item not found")
-    deleted = items_db.pop(item_id)
+    with _db_lock:
+        if item_id not in items_db:
+            raise HTTPException(status_code=404, detail="Item not found")
+        deleted = items_db.pop(item_id)
     return {
         "message": "Item deleted",
         "deleted": deleted,

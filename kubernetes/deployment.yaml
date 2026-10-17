@@ -31,8 +31,12 @@ spec:
             memory: 256Mi
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
+        volumeMounts:
+        - name: tmp               # the only writable path (tempfiles)
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /healthz
@@ -45,6 +49,10 @@ spec:
             port: 8080
           initialDelaySeconds: 2
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
 ---
 apiVersion: autoscaling/v1
 kind: HorizontalPodAutoscaler

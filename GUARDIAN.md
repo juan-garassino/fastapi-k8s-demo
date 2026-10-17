@@ -42,39 +42,46 @@ Automated security & bug guardian ledger for this repo. Branch: `claude/guardian
 | G-025 | low | Docker: unpinned `pip install --upgrade pip` (hadolint DL3013) | Dockerfile | fixed (pip==26.2.1) | 2026-10-17 |
 | G-026 | low | Docker: shell-form CMD (hadolint DL3025) | Dockerfile | fixed (JSON form, `sh -c "exec ..."` keeps `$PORT`) | 2026-10-17 |
 | G-027 | low | tests: no checks tying Dockerfile port/user and Service selector/targetPort to the Deployment | tests/test_manifests.py | fixed (6 tests) | 2026-10-17 |
+| G-028 | low | bug: check-then-act races on the in-memory store (sync endpoints run in a threadpool): a DELETE between update's existence check and write resurrected the item; concurrent creates could overshoot MAX_ITEMS | src/app/main.py | fixed (threading.Lock around create/update/delete) | 2026-10-17 |
+| G-029 | low | k8s: writable container root filesystem | kubernetes/deployment.yaml | fixed (readOnlyRootFilesystem + 64Mi emptyDir at /tmp; verify on a cluster) | 2026-10-17 |
+| G-030 | low | ops: no automated dependency update PRs | .github/dependabot.yml | fixed (pip, docker, github-actions weekly) | 2026-10-17 |
+| G-031 | info | test env warns `StarletteDeprecationWarning`: httpx with starlette.testclient deprecated (httpx2) | requirements-dev.txt | open (not a vuln; revisit when fastapi/starlette drop httpx support) | 2026-10-17 |
 | G-024 | info | pip-audit of the environment flags pip 24.0 (venv bootstrap only; the Dockerfile upgrades pip) | - | n/a | 2026-10-17 |
+
+Run 3: gitleaks over 34 commits, all refs: nothing.
 
 Secrets: gitleaks (31 commits, all refs) and detect-secrets found nothing (run 1). Run 2: gitleaks 8.21.2 over 32 commits, all refs, plus manual `git log -p --all` grep: nothing.
 
 ## Metrics
 
-| metric | run 1 before | run 1 after | run 2 after |
-|--------|--------|-------|-------|
-| open vulns/issues (crit/high/med/low) | 0/2/1/2 packages (18 advisories) | deps 0/0/0/0; config 0/0/1/3 | deps 0/0/0/0; open 0/0/1/3 (G-010 med; G-011, G-014, G-015 low). Run 2 found and fixed 0/0/3/6 |
-| tests passing (plain `pytest`, as CI) | 0 (collection error) | 6/6 | 18/18 (12 after pass 1) |
-| test count | 3 | 6 | 18 |
-| ruff | 11 | 0 | 0 |
-| flake8 (default 79 cols, no config) | 24 | 22 | 0 (7 after pass 1) |
-| mypy errors | 2 | 0 | 0 |
-| bandit (high/med/low) | 0/0/1 | 0/0/1 | 0/0/1 |
-| hadolint | - | - | 0 (2 before pass 2) |
+| metric | run 1 before | run 1 after | run 2 after | run 3 after |
+|--------|--------|-------|-------|-------|
+| open vulns/issues (crit/high/med/low) | 0/2/1/2 packages (18 advisories) | deps 0/0/0/0; config 0/0/1/3 | deps 0/0/0/0; open 0/0/1/3 (G-010 med; G-011, G-014, G-015 low). Run 2 found and fixed 0/0/3/6 | deps 0/0/0/0; open 0/0/1/3 (unchanged, all owner-only). Run 3 found and fixed 0/0/0/3 |
+| tests passing (plain `pytest`, as CI) | 0 (collection error) | 6/6 | 18/18 (12 after pass 1) | 22/22 |
+| test count | 3 | 6 | 18 | 22 |
+| ruff | 11 | 0 | 0 | 0 |
+| flake8 (default 79 cols, no config) | 24 | 22 | 0 (7 after pass 1) | 0 |
+| mypy errors | 2 | 0 | 0 | 0 |
+| bandit (high/med/low) | 0/0/1 | 0/0/1 | 0/0/1 | 0/0/1 |
+| hadolint | - | - | 0 (2 before pass 2) | 0 (Dockerfile unchanged) |
 
 ## Backlog
 
 - Apply the CI patch for G-010/G-011 by hand (guardian token cannot edit workflows).
 - Pin GitHub Actions to commit SHAs (G-014) and base image by digest (G-015).
 - `.sample` workflows grant `contents: write`/`packages: write` workflow-wide; scope per job before enabling them.
-- k8s: consider `readOnlyRootFilesystem: true` after verifying the image starts with it (no cluster available to the guardian).
-- Make `MAX_ITEMS` / echo limit env-configurable (needs an app factory or reset hook so tests can rebuild state).
+- k8s: `readOnlyRootFilesystem: true` is now set (run 3); owner should confirm pods start on a real cluster.
+- Document the `MAX_ITEMS` / `MAX_ECHO_LENGTH` env vars in the README once PR #1 (docs: README) lands, to avoid conflicting edits.
 - Optional CI patch: install `-r requirements-dev.txt` instead of `requirements.txt pytest httpx` so CI uses the pinned test tools (workflow edit, owner only).
 - Image tag `:latest` in kubernetes/deployment.yaml; pin to a commit-SHA tag or digest when the deploy flow writes manifests.
-- Consider pinning transitive deps (lock file) and adding Dependabot.
+- Consider pinning transitive deps (lock file). Dependabot added in run 3.
 
 ## Log
 
 - Run 1 — 2026-10-15: baseline scan; bumped 5 vulnerable deps (pip-audit now clean); fixed ID-reuse overwrite, nullable description, broken CI test import, k8s probe path/port mismatch; CI hardening (deploy-on-PR, OIDC scope) blocked: push token lacks `workflow` scope, left open; non-root Docker user + committed .dockerignore. 3 regression tests added (3 -> 6 tests, all passing).
 
 - Run 2 — 2026-10-17: no PR review comments; deps and secrets still clean (gitleaks 32 commits). Fixed HPA without CPU requests (never scales), added pod securityContext, capped the public in-memory store (507 when full), bounded Item fields and `/echo`, moved test/lint tools out of the production image (requirements-dev.txt), fixed README run commands. 6 regression tests, each failing before its fix (6 -> 12 tests, all passing). Workflow items G-010/G-011/G-014 still need the owner. Pass 2: hadolint added to Checks (DL3013 unpinned pip upgrade, DL3025 shell-form CMD fixed, now 0); new tests/test_manifests.py (6 consistency tests: Dockerfile USER/pins/CMD form/port vs containerPort, Service selector/targetPort, HPA target); flake8 7 -> 0 by wrapping lines (no config loosened). 12 -> 18 tests.
+- Run 3 — 2026-10-17: no PR review comments (one owner-side CI note about the GCP WIF provider, still owner action). pip-audit (runtime + dev) clean, gitleaks 34 commits clean, bandit/ruff/flake8/mypy unchanged at baseline. Fixed check-then-act races on the item store with a lock (G-028; deterministic test that injects a DELETE between update's check and write), made `MAX_ITEMS`/`MAX_ECHO_LENGTH` env-tunable with fail-fast validation (backlog), set `readOnlyRootFilesystem` with an emptyDir `/tmp` (G-029), added `.github/dependabot.yml` (G-030). 18 -> 22 tests, each new one failing before its change. Not a meta-review run (3).
 
 ## Learnings
 
@@ -85,6 +92,8 @@ Secrets: gitleaks (31 commits, all refs) and detect-secrets found nothing (run 1
 - An HPA on `targetCPUUtilizationPercentage` silently does nothing without `resources.requests.cpu`; check every HPA's target for requests.
 - `uvicorn[standard]` pulls in PyYAML, so manifest tests can `yaml.safe_load_all` without a new dependency.
 - hadolint ships as a single static binary on GitHub releases; it installs in seconds without Docker.
+- Races in sync FastAPI handlers can be tested deterministically: swap the store for a dict subclass whose `__contains__` starts the competing call in a thread and joins with a short timeout (blocks under a lock, completes without one).
+- `.github/dependabot.yml` is outside `.github/workflows/`, so the guardian token can add it even without `workflow` scope.
 - Both workflows install `pytest httpx` explicitly, so dev tools could leave requirements.txt without a workflow edit.
 
 ## Ideas
@@ -95,3 +104,6 @@ Secrets: gitleaks (31 commits, all refs) and detect-secrets found nothing (run 1
 4. Run `kubeconform`/`kube-linter` on `kubernetes/` in CI to catch missing requests/securityContext.
 5. Read `MAX_ITEMS` and the echo limit from env vars so Cloud Run can tune them without a rebuild.
 6. Add a Docker build plus `trivy image` scan job once the workflow scope is available.
+7. Add a `kubectl apply --dry-run=client`/kubeconform check in tests when the binary is available offline.
+8. Expose store size vs `MAX_ITEMS` on `/status` so operators see when the 507 cap is near.
+9. Replace the per-replica in-memory store note: with 3+ replicas, items are not shared across pods; document or back with Redis.

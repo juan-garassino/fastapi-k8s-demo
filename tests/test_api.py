@@ -157,3 +157,49 @@ def test_runtime_requirements_exclude_dev_tools():
         if line.strip() and not line.lstrip().startswith("#")
     }
     assert names.isdisjoint({"pytest", "black", "flake8", "mypy", "bandit"})
+
+
+def test_update_does_not_resurrect_concurrently_deleted_item(monkeypatch):
+    # Regression: update_item checked `item_id in items_db` and then wrote
+    # it. Sync endpoints run in a threadpool, so a DELETE landing between the
+    # check and the write was undone: the "deleted" item came back.
+    import threading
+
+    from app import main
+
+    threads = []
+
+    class RacyDict(dict):
+        armed = True
+
+        def __contains__(self, key):
+            found = dict.__contains__(self, key)
+            if self.armed:
+                self.armed = False
+                t = threading.Thread(target=main.delete_item, args=(key,))
+                t.start()
+                t.join(timeout=0.2)  # let the delete run "in between"
+                threads.append(t)
+            return found
+
+    body = {"name": "R", "price": 1.0, "quantity": 1}
+    monkeypatch.setattr(main, "items_db", RacyDict({1: body}))
+    main.update_item(1, main.Item(**body))
+    for t in threads:
+        t.join(timeout=2)
+    assert 1 not in dict.keys(main.items_db)
+
+
+def test_limits_are_configurable_from_env(monkeypatch):
+    import pytest
+
+    from app import main
+
+    monkeypatch.setenv("GUARDIAN_TEST_LIMIT", "42")
+    assert main._env_int("GUARDIAN_TEST_LIMIT", 7) == 42
+    monkeypatch.delenv("GUARDIAN_TEST_LIMIT")
+    assert main._env_int("GUARDIAN_TEST_LIMIT", 7) == 7
+    for bad in ("0", "-3", "abc"):
+        monkeypatch.setenv("GUARDIAN_TEST_LIMIT", bad)
+        with pytest.raises(ValueError):
+            main._env_int("GUARDIAN_TEST_LIMIT", 7)

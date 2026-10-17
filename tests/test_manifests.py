@@ -65,3 +65,18 @@ def test_hpa_targets_existing_deployment():
     ref = hpa["spec"]["scaleTargetRef"]
     assert ref["name"] == _deployment()["metadata"]["name"]
     assert hpa["spec"]["minReplicas"] <= hpa["spec"]["maxReplicas"]
+
+
+def test_container_root_filesystem_is_read_only_with_writable_tmp():
+    pod = _deployment()["spec"]["template"]["spec"]
+    volumes = {v["name"] for v in pod.get("volumes", []) if "emptyDir" in v}
+    for c in pod["containers"]:
+        assert c["securityContext"].get("readOnlyRootFilesystem") is True
+        mounts = {m["mountPath"]: m["name"] for m in c.get("volumeMounts", [])}
+        assert mounts.get("/tmp") in volumes
+
+
+def test_dependabot_covers_pip_docker_and_actions():
+    cfg = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text())
+    ecosystems = {u["package-ecosystem"] for u in cfg["updates"]}
+    assert {"pip", "docker", "github-actions"} <= ecosystems
