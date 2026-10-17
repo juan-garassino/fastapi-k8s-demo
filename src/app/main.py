@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(
     title="FastAPI CI/CD Demo",
-    description="Simple FastAPI app showcasing CI/CD deployment with GET, POST, PUT, DELETE endpoints.",
+    description=(
+        "Simple FastAPI app showcasing CI/CD deployment with GET, POST, PUT,"
+        " DELETE endpoints."
+    ),
     version="1.1.0"
 )
 
@@ -34,7 +37,10 @@ _next_id = count(1)
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to FastAPI CI/CD Demo!", "timestamp": datetime.now(UTC)}
+    return {
+        "message": "Welcome to FastAPI CI/CD Demo!",
+        "timestamp": datetime.now(UTC),
+    }
 
 
 @app.get("/healthz")
@@ -65,7 +71,11 @@ def create_item(item: Item):
         raise HTTPException(status_code=507, detail="Item store is full")
     item_id = next(_next_id)
     items_db[item_id] = item.model_dump()
-    return {"message": "Item created", "item_id": item_id, "timestamp": datetime.now(UTC)}
+    return {
+        "message": "Item created",
+        "item_id": item_id,
+        "timestamp": datetime.now(UTC),
+    }
 
 
 @app.put("/items/{item_id}")
@@ -74,7 +84,11 @@ def update_item(item_id: int, item: Item):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
     items_db[item_id] = item.model_dump()
-    return {"message": "Item updated", "item_id": item_id, "timestamp": datetime.now(UTC)}
+    return {
+        "message": "Item updated",
+        "item_id": item_id,
+        "timestamp": datetime.now(UTC),
+    }
 
 
 @app.delete("/items/{item_id}")
@@ -83,13 +97,20 @@ def delete_item(item_id: int):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
     deleted = items_db.pop(item_id)
-    return {"message": "Item deleted", "deleted": deleted, "timestamp": datetime.now(UTC)}
+    return {
+        "message": "Item deleted",
+        "deleted": deleted,
+        "timestamp": datetime.now(UTC),
+    }
 
 
 @app.get("/random")
 def get_random_number():
     """Simple random number generator for testing variability."""
-    return {"random_number": random.randint(1, 100), "timestamp": datetime.now(UTC)}
+    return {
+        "random_number": random.randint(1, 100),
+        "timestamp": datetime.now(UTC),
+    }
 
 
 @app.get("/echo/{text}")

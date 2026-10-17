@@ -14,7 +14,12 @@ def test_read_root():
 
 def test_create_and_read_item():
     # First create an item
-    new_item = {"name": "Test", "description": "For testing", "price": 10.0, "quantity": 1}
+    new_item = {
+        "name": "Test",
+        "description": "For testing",
+        "price": 10.0,
+        "quantity": 1,
+    }
     post_response = client.post("/items", json=new_item)
     assert post_response.status_code == 200
     item_id = post_response.json()["item_id"]
